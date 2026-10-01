@@ -83,4 +83,4 @@ Add `?seed=42` to the URL for a clean, reproducible simulator.
 
 ---
 
-Built by Hafsa Usmani, with Claude Code as a pair. Feedback welcome.
+Built by Hafsa Usmani. Feedback welcome.
