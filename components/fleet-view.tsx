@@ -3,11 +3,11 @@
 import { AnimatePresence, motion } from "motion/react";
 import { LIMITS } from "@/lib/sim/engine";
 import { MachineCard } from "./machine-card";
-import { OPEN_CREATE_EVENT } from "./new-machine-dialog";
+import { requestCreate } from "./new-machine-dialog";
 import { useFleet } from "./providers";
 import { StackIllustration } from "./stack-illustration";
 
-export const openCreate = () => window.dispatchEvent(new Event(OPEN_CREATE_EVENT));
+export const openCreate = requestCreate;
 
 export function FleetView() {
   const fleet = useFleet();
@@ -21,7 +21,7 @@ export function FleetView() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow tabular">
-            Fleet · {live.length}/{LIMITS.machines} machines · {running} running
+            {fleet.loaded ? `Fleet · ${live.length}/${LIMITS.machines} machines · ${running} running` : "Fleet"}
           </p>
           <h1 id="fleet-title" className="mt-2 text-2xl tracking-tight text-fg">
             Machines
@@ -46,15 +46,22 @@ export function FleetView() {
         </p>
       )}
 
-      {!fleet.loaded ? (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading machines">
+      {/* Slots keep stable positions so the empty state is the *same* DOM node
+          before and after boot: no remount, no second LCP paint. Before boot,
+          the pre-paint script picks which fallback CSS shows (see globals.css). */}
+      {(!fleet.loaded || machines.length === 0) && (
+        <div className="when-fleet-empty">
+          <EmptyState />
+        </div>
+      )}
+      {!fleet.loaded && (
+        <div className="when-fleet-saved mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading machines">
           {[0, 1, 2].map((i) => (
             <div key={i} className="reticle h-[184px] animate-pulse" />
           ))}
         </div>
-      ) : machines.length === 0 ? (
-        <EmptyState />
-      ) : (
+      )}
+      {fleet.loaded && machines.length > 0 && (
         <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence initial={false}>
             {machines.map((m) => (

@@ -131,6 +131,12 @@ a.reticle:hover {
   mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 70%);
 }
 
+/* Server-rendered fleet fallback: show the variant the pre-paint script picked. */
+:root[data-fleet="saved"] .when-fleet-empty,
+:root:not([data-fleet="saved"]) .when-fleet-saved {
+  display: none;
+}
+
 /* Native <dialog> with an entry animation in pure CSS (@starting-style). */
 dialog.sheet {
   margin: auto;

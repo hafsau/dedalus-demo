@@ -14,9 +14,25 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#09090b", colorScheme: "dark" };
 
+/**
+ * Runs before first paint:
+ * 1. Tells CSS whether this visitor has a saved fleet, so the server-rendered
+ *    fallback shows the empty state or a skeleton without a flash.
+ * 2. Starts installing the simulator's Service Worker while JS downloads.
+ */
+const PREPAINT = `(function(){try{
+var d=document.documentElement,seeded=/[?&]seed=/.test(location.search);
+d.dataset.fleet=(!seeded&&localStorage.getItem("workshop.sim.v1"))?"saved":"empty";
+if("serviceWorker" in navigator&&location.pathname.indexOf("/about")!==0)navigator.serviceWorker.register("/mockServiceWorker.js").catch(function(){});
+}catch(e){}})()`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    // data-fleet is set by PREPAINT before hydration, hence suppressHydrationWarning.
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: PREPAINT }} />
+      </head>
       <body className="flex min-h-dvh flex-col font-sans">
         <a
           href="#main"

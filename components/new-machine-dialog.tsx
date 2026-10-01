@@ -19,6 +19,14 @@ const AUTOSLEEP = [
 
 export const OPEN_CREATE_EVENT = "workshop:new-machine";
 
+// A click can land before the simulator (and this dialog) has mounted.
+// Remember it, and open as soon as the dialog exists.
+let pendingOpen = false;
+export function requestCreate() {
+  pendingOpen = true;
+  window.dispatchEvent(new Event(OPEN_CREATE_EVENT));
+}
+
 export function NewMachineDialog() {
   const ref = useRef<HTMLDialogElement>(null);
   const store = useFleetStore();
@@ -29,7 +37,11 @@ export function NewMachineDialog() {
   const titleId = useId();
 
   useEffect(() => {
-    const open = () => ref.current?.showModal();
+    const open = () => {
+      pendingOpen = false;
+      if (!ref.current?.open) ref.current?.showModal();
+    };
+    if (pendingOpen) open();
     window.addEventListener(OPEN_CREATE_EVENT, open);
     return () => window.removeEventListener(OPEN_CREATE_EVENT, open);
   }, []);

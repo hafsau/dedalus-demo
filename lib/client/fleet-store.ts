@@ -136,6 +136,7 @@ export class FleetStore {
       if (!prev) toFetchStatus.push(item.machine_id);
       machines[item.machine_id] = m;
     }
+    if (!this.snap.loaded) performance.mark("workshop:fleet-loaded");
     this.set({ loaded: true, machines, order: items.map((i) => i.machine_id) });
     for (const id of toFetchStatus) void this.refreshStatus(id);
   }
