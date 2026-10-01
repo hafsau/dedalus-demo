@@ -17,6 +17,6 @@
         "total-blocking-time": ["warn", { "maxNumericValue": 300 }]
       }
     },
-    "upload": { "target": "filesystem", "outputDir": ".lighthouseci" }
+    "upload": { "target": "filesystem", "outputDir": "lighthouse-reports" }
   }
 }
