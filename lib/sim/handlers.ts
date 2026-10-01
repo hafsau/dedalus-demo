@@ -6,6 +6,7 @@
 import { http, HttpResponse, type HttpResponseResolver } from "msw";
 import type { CreateExecutionRequest, CreateMachineRequest, UpdateMachineRequest } from "../api/types";
 import { SimError, type SimEngine } from "./engine";
+import { SIM_HEADER } from "./protocol";
 
 export const SIM_BASE = "/dcs";
 
@@ -61,32 +62,42 @@ export function createHandlers(getEngine: () => SimEngine, opts: { base?: string
 
   const route =
     (fn: Fn, status = 200): HttpResponseResolver<Params> =>
-    async ({ params, request }) => {
-      const mutating = request.method !== "GET";
-      const key = mutating ? (request.headers.get("Idempotency-Key") ?? crypto.randomUUID()) : null;
-      const headers: Record<string, string> = key ? { "Idempotency-Key": key } : {};
-      try {
-        let hash = "";
-        if (key) {
-          hash = `${request.method} ${new URL(request.url).pathname} ${await request.clone().text()}`;
-          const seen = idempotency.get(key);
-          if (seen && seen.hash !== hash) {
-            throw new SimError(409, "Conflict", "idempotency key reused with different request parameters", "IDEMPOTENCY_KEY_REUSED");
-          }
-          if (seen) return HttpResponse.json(seen.body as never, { status: seen.status, headers });
-        }
-        const body = await fn({ engine: getEngine(), params, request, now: Date.now() });
-        if (body instanceof SimError) throw body;
-        if (key) idempotency.set(key, { hash, status, body });
-        return status === 204 ? new HttpResponse(null, { status, headers }) : HttpResponse.json(body as never, { status, headers });
-      } catch (e) {
-        if (e instanceof SimError) return errorResponse(e);
-        console.error("[sim]", e);
-        return problem(500, "Internal Server Error", "simulator error");
-      } finally {
-        opts.onChange?.();
-      }
+    async (info) => {
+      const res = await respond(fn, status, info);
+      res.headers.set(SIM_HEADER, "1");
+      return res;
     };
+
+  const respond = async (
+    fn: Fn,
+    status: number,
+    { params, request }: { params: Params; request: Request },
+  ): Promise<Response> => {
+    const mutating = request.method !== "GET";
+    const key = mutating ? (request.headers.get("Idempotency-Key") ?? crypto.randomUUID()) : null;
+    const headers: Record<string, string> = key ? { "Idempotency-Key": key } : {};
+    try {
+      let hash = "";
+      if (key) {
+        hash = `${request.method} ${new URL(request.url).pathname} ${await request.clone().text()}`;
+        const seen = idempotency.get(key);
+        if (seen && seen.hash !== hash) {
+          throw new SimError(409, "Conflict", "idempotency key reused with different request parameters", "IDEMPOTENCY_KEY_REUSED");
+        }
+        if (seen) return HttpResponse.json(seen.body as never, { status: seen.status, headers });
+      }
+      const body = await fn({ engine: getEngine(), params, request, now: Date.now() });
+      if (body instanceof SimError) throw body;
+      if (key) idempotency.set(key, { hash, status, body });
+      return status === 204 ? new HttpResponse(null, { status, headers }) : HttpResponse.json(body as never, { status, headers });
+    } catch (e) {
+      if (e instanceof SimError) return errorResponse(e);
+      console.error("[sim]", e);
+      return problem(500, "Internal Server Error", "simulator error");
+    } finally {
+      opts.onChange?.();
+    }
+  };
 
   return [
     http.get(`${v1}/machines`, route(({ engine, now }) => ({ items: engine.listMachines(now) }))),
@@ -156,6 +167,10 @@ export function createHandlers(getEngine: () => SimEngine, opts: { base?: string
 
     // Everything else in the spec (SSH sessions, log tokens) is
     // honestly unimplemented rather than faked.
-    http.all(`${v1}/*`, () => problem(501, "Not Implemented", "This endpoint exists in the DCS API but isn't simulated in Workshop.")),
+    http.all(`${v1}/*`, () => {
+      const res = problem(501, "Not Implemented", "This endpoint exists in the DCS API but isn't simulated in Workshop.");
+      res.headers.set(SIM_HEADER, "1");
+      return res;
+    }),
   ];
 }

@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/hafsau/dedalus-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/hafsau/dedalus-demo/actions/workflows/ci.yml)
 
+**▶ Live: [dedalus-demo-delta.vercel.app](https://dedalus-demo-delta.vercel.app)** · [Case study](https://dedalus-demo-delta.vercel.app/about)
+
 **A control room for Dedalus Machines.** It's an unofficial concept by [Hafsa Usmani](https://hafsausmani.com), built to answer one question:
 
 > *Could you make AI infrastructure feel effortless?*
@@ -10,7 +12,7 @@ Workshop is a web console for [Dedalus Machines](https://www.dedaluslabs.ai), pe
 
 > **Not affiliated with Dedalus Labs.** Latency and cost figures are simulated from published numbers. Nothing here measures Dedalus' infrastructure.
 
-The full write-up is on the **[case study page](/about)** (`/about` in the running app). It covers the design principles, an interactive spring-vs-tween demo, the architecture, and what failed.
+The full write-up is on the **[case study page](https://dedalus-demo-delta.vercel.app/about)**. It covers the design principles, an interactive spring-vs-tween demo, the architecture, and what failed.
 
 ---
 
@@ -78,6 +80,7 @@ Add `?seed=42` to the URL for a clean, reproducible simulator.
 ## Decisions worth knowing
 
 - **Why the simulator runs in a Service Worker:** a server-side simulator would flake on serverless hosting, where instances don't share memory. In the browser, each visitor gets an isolated fleet and the demo can't go down.
+- **Why every simulator response is stamped:** browsers stop idle Service Workers, and MSW's worker forgets its tabs when that happens. That broke the live site before any test caught it. The client now spots a response that skipped the simulator, reconnects and retries. `e2e/resilience.spec.ts` kills the worker mid-session to prove it.
 - **Why the empty state is server-rendered:** the largest paint shouldn't wait for the simulator. A pre-paint script tells CSS whether this visitor has a saved fleet, so first visits paint the real empty state instantly. Measured console LCP went from 4.7s to 1.7s.
 - **Springs vs. tweens:** anything that represents *state* uses a spring, because phase updates arrive faster than a tween can finish. The 2.5s reference bar is a linear tween because it represents *time*.
 

@@ -17,6 +17,7 @@ import type {
   paths,
   UpdateMachineRequest,
 } from "../api/types";
+import { SIM_HEADER } from "../sim/protocol";
 
 /**
  * Normalises the spec's two error shapes:
@@ -114,8 +115,22 @@ export type DcsClient = ReturnType<typeof createDcsClient>;
 
 let browserClient: DcsClient | null = null;
 
+/**
+ * Every simulator response is stamped with SIM_HEADER. One without it reached
+ * the real network, which means the browser restarted an idle Service Worker
+ * and it forgot this tab. Reconnect and retry once. That's safe: the stray
+ * request only hit a static 404 and changed nothing.
+ */
+async function simulatorAwareFetch(req: Request): Promise<Response> {
+  const res = await globalThis.fetch(req.clone());
+  if (res.headers.has(SIM_HEADER)) return res;
+  const { reactivateSimulator } = await import("../sim/browser");
+  await reactivateSimulator();
+  return globalThis.fetch(req);
+}
+
 /** The app's client: same-origin `/dcs`, served by the simulator in this demo. */
 export function dcs(): DcsClient {
-  browserClient ??= createDcsClient(`${location.origin}/dcs`);
+  browserClient ??= createDcsClient(`${location.origin}/dcs`, simulatorAwareFetch);
   return browserClient;
 }

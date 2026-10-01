@@ -5,6 +5,7 @@ import { ApiError, createDcsClient } from "@/lib/client/api";
 import { streamExecution } from "@/lib/client/stream";
 import { SimEngine } from "@/lib/sim/engine";
 import { createHandlers } from "@/lib/sim/handlers";
+import { SIM_HEADER } from "@/lib/sim/protocol";
 
 let engine = new SimEngine({ seed: 1 });
 const server = setupServer(...createHandlers(() => engine, { base: "http://localhost/dcs" }));
@@ -76,6 +77,14 @@ describe("DCS contract over HTTP", () => {
   it("answers unsimulated endpoints with an honest 501", async () => {
     const res = await fetch("http://localhost/dcs/v1/machines/x/ssh");
     expect(res.status).toBe(501);
+    expect(res.headers.get(SIM_HEADER)).toBe("1");
+  });
+
+  it("stamps every response, success or error, so the client can tell it reached the simulator", async () => {
+    const ok = await fetch("http://localhost/dcs/v1/machines");
+    const notFound = await fetch("http://localhost/dcs/v1/machines/nope");
+    const conflict = await fetch("http://localhost/dcs/v1/machines", { method: "POST", body: "not json" });
+    for (const res of [ok, notFound, conflict]) expect(res.headers.get(SIM_HEADER)).toBe("1");
   });
 });
 

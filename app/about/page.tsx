@@ -247,6 +247,13 @@ export default function AboutPage() {
             Vitest ships its own MSW 2. Its install hook quietly replaced my v3 worker on every <Code>npm install</Code>.
             I removed the config it keyed on, and a test now fails if the versions ever drift.
           </Item>
+          <Item title="It worked in every test, then broke on the live site.">
+            Right after deploying, the console stopped responding. Browsers stop idle Service Workers, and MSW&apos;s
+            worker keeps its list of mocked tabs in memory. After a restart it forgot the tab, and requests fell through
+            to a 404. Tests never sat idle, so they never saw it. Now every simulator response carries a header. If a
+            response comes back without it, the client re-registers the tab and retries. A Playwright test kills the
+            worker mid-session to prove it, and I confirmed that test fails without the fix.
+          </Item>
           <Item title="I mislabeled a number.">
             My wake timer said &ldquo;control plane&rdquo;, but it starts at the click, so it includes the API round trip. I
             renamed it rather than adjust the number.
