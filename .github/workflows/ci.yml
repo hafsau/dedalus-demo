@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Fails if lib/api/schema.ts drifts from spec/dcs-openapi.json.
+      - run: npx openapi-typescript spec/dcs-openapi.json -o lib/api/schema.ts --default-non-nullable false --check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
