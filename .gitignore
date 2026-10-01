@@ -45,3 +45,6 @@ next-env.d.ts
 /playwright-report
 /blob-report
 /.lighthouseci
+
+# local tooling
+/.claude
