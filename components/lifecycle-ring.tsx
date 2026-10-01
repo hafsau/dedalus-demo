@@ -81,7 +81,7 @@ export function LifecycleRing({ phase, desired }: { phase: Phase; desired: Desir
 
   return (
     <figure className="m-0">
-      <svg viewBox="-14 0 376 222" className="w-full" role="img" aria-label={`Lifecycle: ${phaseLabel(phase)}, desired ${desired}`}>
+      <svg viewBox="-14 0 392 222" className="w-full" role="img" aria-label={`Lifecycle: ${phaseLabel(phase)}, desired ${desired}`}>
         {/* tail + ring */}
         <line x1={point(-2)[0]} y1={CY} x2={CX - R} y2={CY} stroke="var(--line-strong)" strokeDasharray="2 4" />
         <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--line-strong)" />

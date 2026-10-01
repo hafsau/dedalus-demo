@@ -11,7 +11,7 @@ export function PaletteButton() {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
-      className="ml-2 flex items-center gap-2 border border-line px-2 py-1 font-mono text-xs text-dim hover:border-line-strong hover:text-fg"
+      className="ml-2 hidden items-center gap-2 border border-line px-2 py-1 font-mono text-xs text-dim hover:border-line-strong hover:text-fg sm:flex"
       aria-label="Open command palette"
       aria-keyshortcuts="Meta+K Control+K"
     >
