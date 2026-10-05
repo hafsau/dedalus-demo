@@ -13,6 +13,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "cmdk": "^1.1.1",
     "motion": "^13.5.0",
     "msw": "^3.0.1",
