@@ -83,17 +83,44 @@ type FetchFn = (req: Request) => Promise<Response>;
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
 
-/** No request may hang forever: a stuck button is worse than an honest error. */
+/**
+ * No request may hang forever: a stuck button is worse than an honest error.
+ *
+ * The timer races the request instead of relying only on the abort signal
+ * reaching it. In Node, a signal passed through `new Request()` is followed
+ * weakly and can be garbage-collected, so a signal-only timeout never fired
+ * on CI. The abort is still sent, best effort, to free the connection.
+ */
 const withTimeout =
   (inner: FetchFn, ms: number): FetchFn =>
   async (req) => {
-    const timeout = AbortSignal.timeout(ms);
+    const controller = new AbortController();
+    const forward = () => controller.abort(req.signal.reason);
+    if (req.signal.aborted) forward();
+    else req.signal.addEventListener("abort", forward, { once: true });
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let expired = false;
+    const timeoutError = () => new NetworkError("timeout", `No response after ${ms / 1000}s`);
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        expired = true;
+        reject(timeoutError());
+        controller.abort(new DOMException("timed out", "TimeoutError"));
+      }, ms);
+    });
+    const attempt = inner(new Request(req, { signal: controller.signal }));
+    attempt.catch(() => {}); // after a timeout nobody awaits it; don't report it as unhandled
+
     try {
-      return await inner(new Request(req, { signal: AbortSignal.any([req.signal, timeout]) }));
+      return await Promise.race([attempt, timedOut]);
     } catch (e) {
+      if (expired) throw e instanceof NetworkError ? e : timeoutError();
       if (req.signal.aborted) throw e; // the caller cancelled; not our error to rename
-      if (timeout.aborted) throw new NetworkError("timeout", `No response after ${ms / 1000}s`);
       throw new NetworkError("unreachable", "Couldn't reach the control plane");
+    } finally {
+      clearTimeout(timer);
+      req.signal.removeEventListener("abort", forward);
     }
   };
 
