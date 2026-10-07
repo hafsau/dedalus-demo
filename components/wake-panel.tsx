@@ -53,13 +53,16 @@ export function WakePanel({ machine }: { machine: MachineState }) {
             <span className="text-sm text-dim">ms</span>
           </p>
           <p className="mt-1 text-xs text-dim">
-            {live !== null
+            {item.phase === "failed"
+              ? "can't measure: this machine failed to start"
+              : live !== null
               ? "waking…"
               : last
                 ? `wake request → running · on screen at ${Math.round(last.observedMs)}ms`
                 : "sleep the machine, then wake it to measure"}
           </p>
         </div>
+        {item.phase !== "failed" && (
         <button
           type="button"
           onClick={() => (item.phase === "sleeping" ? store.wake(item.machine_id) : store.sleep(item.machine_id))}
@@ -68,6 +71,7 @@ export function WakePanel({ machine }: { machine: MachineState }) {
         >
           {item.phase === "sleeping" ? "Wake" : "Sleep"}
         </button>
+        )}
       </div>
 
       <Comparison lastMs={last?.requestToRunningMs} runKey={wakes.length} />

@@ -57,7 +57,7 @@ export function NewMachineDialog() {
     setBusy(false);
     if (id) {
       ref.current?.close();
-      router.push(`/machines/${id}`, { transitionTypes: ["nav-forward"] });
+      router.push(`/machines/${id}`);
     }
   }
 

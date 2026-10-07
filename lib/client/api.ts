@@ -11,6 +11,7 @@ import type {
   CreateMachineRequest,
   Execution,
   ExecutionEventsResponse,
+  ExecutionOutput,
   LifecycleResponse,
   MachineDetail,
   MachineListItem,
@@ -43,6 +44,34 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The request never got a usable answer: offline, a dropped connection, or a
+ * timeout. Distinct from ApiError, where the control plane answered "no".
+ */
+export class NetworkError extends Error {
+  constructor(
+    readonly reason: "timeout" | "unreachable",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * One sentence a person can act on. After a failed mutation we can't know
+ * whether it took effect (the reply may be what was lost), so the honest
+ * message is "checking", not "nothing changed".
+ */
+export function describeError(e: unknown, action?: string): string {
+  if (e instanceof NetworkError) {
+    return e.reason === "timeout"
+      ? `No response after ${DEFAULT_TIMEOUT_MS / 1000}s${action ? ` to ${action}` : ""}. Showing the last known state while we check again.`
+      : `Couldn't reach the control plane${action ? ` to ${action}` : ""}. Checking the machine's real state.`;
+  }
+  if (e instanceof ApiError) return e.message;
+  return action ? `Couldn't ${action}.` : "Something went wrong.";
+}
+
 type Result<T> = { data?: T; error?: unknown; response: Response };
 
 function unwrap<T>({ data, error, response }: Result<T>): T {
@@ -51,6 +80,22 @@ function unwrap<T>({ data, error, response }: Result<T>): T {
 }
 
 type FetchFn = (req: Request) => Promise<Response>;
+
+export const DEFAULT_TIMEOUT_MS = 10_000;
+
+/** No request may hang forever: a stuck button is worse than an honest error. */
+const withTimeout =
+  (inner: FetchFn, ms: number): FetchFn =>
+  async (req) => {
+    const timeout = AbortSignal.timeout(ms);
+    try {
+      return await inner(new Request(req, { signal: AbortSignal.any([req.signal, timeout]) }));
+    } catch (e) {
+      if (req.signal.aborted) throw e; // the caller cancelled; not our error to rename
+      if (timeout.aborted) throw new NetworkError("timeout", `No response after ${ms / 1000}s`);
+      throw new NetworkError("unreachable", "Couldn't reach the control plane");
+    }
+  };
 
 /**
  * Every mutation carries an Idempotency-Key, so a request whose response was
@@ -68,15 +113,18 @@ const idempotentFetch =
     try {
       return await inner(make());
     } catch (e) {
-      if (req.signal.aborted) throw e;
+      // Retry a dropped connection once, with the same key, so a reply lost
+      // after the work was done can't make it happen twice. Don't retry a
+      // timeout: the person has already waited long enough.
+      if (req.signal.aborted || (e instanceof NetworkError && e.reason === "timeout")) throw e;
       return inner(make());
     }
   };
 
-export function createDcsClient(baseUrl: string, fetchImpl?: FetchFn) {
+export function createDcsClient(baseUrl: string, fetchImpl?: FetchFn, opts: { timeoutMs?: number } = {}) {
   // Late-bound so test interceptors that patch globalThis.fetch still apply.
   const base: FetchFn = fetchImpl ?? ((req) => globalThis.fetch(req));
-  const c = createClient<paths>({ baseUrl, fetch: idempotentFetch(base) });
+  const c = createClient<paths>({ baseUrl, fetch: idempotentFetch(withTimeout(base, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)) });
   const machine = (machine_id: string) => ({ params: { path: { machine_id } } });
   const exec = (machine_id: string, execution_id: string) => ({ params: { path: { machine_id, execution_id } } });
 
@@ -96,6 +144,8 @@ export function createDcsClient(baseUrl: string, fetchImpl?: FetchFn) {
       unwrap(await c.POST("/v1/machines/{machine_id}/executions", { ...machine(id), body })),
     getExecution: async (id: string, executionId: string): Promise<Execution> =>
       unwrap(await c.GET("/v1/machines/{machine_id}/executions/{execution_id}", exec(id, executionId))),
+    getOutput: async (id: string, executionId: string): Promise<ExecutionOutput> =>
+      unwrap(await c.GET("/v1/machines/{machine_id}/executions/{execution_id}/output", exec(id, executionId))),
     listEvents: async (
       id: string,
       executionId: string,

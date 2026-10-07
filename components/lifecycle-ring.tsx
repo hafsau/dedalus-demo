@@ -57,7 +57,7 @@ const TONE: Record<string, string> = {
 /** Tuned to settle in ~350ms without overshooting past a node. */
 export const RING_SPRING = { stiffness: 210, damping: 26, mass: 0.9 } as const;
 
-export function LifecycleRing({ phase, desired }: { phase: Phase; desired: DesiredState }) {
+export function LifecycleRing({ phase, desired, stale = false }: { phase: Phase; desired: DesiredState; stale?: boolean }) {
   const reduced = useReducedMotion();
   const raw = useMotionValue(BASE[phase] ?? 0);
   const s = useSpring(raw, RING_SPRING);
@@ -73,7 +73,8 @@ export function LifecycleRing({ phase, desired }: { phase: Phase; desired: Desir
   const x = useTransform(s, (v) => point(v)[0]);
   const y = useTransform(s, (v) => point(v)[1]);
 
-  const tone = TONE[phaseTone(phase)];
+  const tone = stale ? "var(--fg-dim)" : TONE[phaseTone(phase)];
+  const failed = phase === "failed";
   const gone = phase === "destroyed" || phase === "destroying";
   const desiredS = desired === "running" ? 1 : desired === "sleeping" ? 3 : null;
   const [gx, gy] = desiredS !== null ? point(desiredS) : [0, 0];
@@ -81,7 +82,8 @@ export function LifecycleRing({ phase, desired }: { phase: Phase; desired: Desir
 
   return (
     <figure className="m-0">
-      <svg viewBox="-14 0 392 222" className="w-full" role="img" aria-label={`Lifecycle: ${phaseLabel(phase)}, desired ${desired}`}>
+      <svg viewBox="-14 0 392 222" className="w-full" role="img"
+        aria-label={`Lifecycle: ${phaseLabel(phase)}${failed ? "" : `, desired ${desired}`}${stale ? " (last known)" : ""}`}>
         {/* tail + ring */}
         <line x1={point(-2)[0]} y1={CY} x2={CX - R} y2={CY} stroke="var(--line-strong)" strokeDasharray="2 4" />
         <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--line-strong)" />
@@ -114,7 +116,7 @@ export function LifecycleRing({ phase, desired }: { phase: Phase; desired: Desir
         })}
 
         {/* desired state: a hollow target the dot reconciles toward */}
-        {desiredS !== null && !gone && (
+        {desiredS !== null && !gone && !failed && (
           <motion.circle
             cx={gx}
             cy={gy}
@@ -136,14 +138,21 @@ export function LifecycleRing({ phase, desired }: { phase: Phase; desired: Desir
           initial={false}
           animate={{ fill: tone, opacity: phase === "destroyed" ? 0.2 : 1, scale: gone ? 0.6 : 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 28 }}
-          style={{ filter: `drop-shadow(0 0 6px ${tone})` }}
+          style={{ filter: stale ? undefined : `drop-shadow(0 0 6px ${tone})` }}
         />
 
         <text x={CX} y={CY - 4} textAnchor="middle" fontFamily="var(--font-geist-mono)" fontSize="9" letterSpacing="2" fill="var(--fg-dim)">
-          DESIRED
+          {stale ? "LAST KNOWN" : failed ? "STATUS" : "DESIRED"}
         </text>
-        <text x={CX} y={CY + 12} textAnchor="middle" fontFamily="var(--font-geist-mono)" fontSize="12" fill="var(--accent)">
-          {desired}
+        <text
+          x={CX}
+          y={CY + 12}
+          textAnchor="middle"
+          fontFamily="var(--font-geist-mono)"
+          fontSize="12"
+          fill={failed ? "var(--danger)" : stale ? "var(--fg-dim)" : "var(--accent)"}
+        >
+          {failed ? "boot failed" : desired}
         </text>
       </svg>
       <figcaption className="sr-only">

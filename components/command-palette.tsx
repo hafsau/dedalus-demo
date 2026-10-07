@@ -80,7 +80,7 @@ export function CommandPalette() {
             {machineAction("reboot", "Reboot (fresh memory, keeps files)", () => store.reboot(current.item.machine_id))}
             {machineAction("destroy", "Destroy", () => {
               void store.destroy(current.item.machine_id);
-              router.push("/", { transitionTypes: ["nav-back"] });
+              router.push("/");
             })}
           </Command.Group>
         )}
@@ -89,7 +89,7 @@ export function CommandPalette() {
           <Command.Item className={item} onSelect={() => run(() => window.dispatchEvent(new Event(OPEN_CREATE_EVENT)))}>
             New machine
           </Command.Item>
-          <Command.Item className={item} onSelect={() => run(() => router.push("/", { transitionTypes: ["nav-back"] }))}>
+          <Command.Item className={item} onSelect={() => run(() => router.push("/"))}>
             Go to fleet
           </Command.Item>
           {fleet.order
@@ -100,7 +100,7 @@ export function CommandPalette() {
                 key={m.item.machine_id}
                 className={item}
                 value={`open ${hostname(m.item.machine_id)} ${m.item.machine_id}`}
-                onSelect={() => run(() => router.push(`/machines/${m.item.machine_id}`, { transitionTypes: ["nav-forward"] }))}
+                onSelect={() => run(() => router.push(`/machines/${m.item.machine_id}`))}
               >
                 <span className="font-mono">Open {hostname(m.item.machine_id)}</span>
                 <span className="text-[11px] text-dim">{phaseLabel(m.item.phase)}</span>
@@ -131,7 +131,7 @@ export function CommandPalette() {
               run(() => {
                 resetSimulator();
                 store.kick();
-                router.push("/", { transitionTypes: ["nav-back"] });
+                router.push("/");
               })
             }
           >

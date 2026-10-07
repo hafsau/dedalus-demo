@@ -26,6 +26,8 @@ The full write-up is on the **[case study page](https://dedalus-demo-delta.verce
 | **Cost meter** | Spent vs. *saved by sleeping*, using the published rates. |
 | **Equivalent code** | Every action shows the SDK call it made. |
 | **Guardrails** | Actions the API would reject (`409 INVALID_STATE`) are disabled with the reason, in buttons and in ⌘K. |
+| **Honest states** | When the control plane is unreachable, statuses are marked *last known* with their age. Stopping a command says "stopped watching" and offers *check status*. A failed machine says what happened and what to do next. |
+| **Network conditions** | The **Simulated** pill switches between normal, slow, flaky and offline networks, so loading, retry and failure states can be seen and tested. |
 
 ## How it's built
 
@@ -70,9 +72,12 @@ Add `?seed=42` to the URL for a clean, reproducible simulator.
   - cost math, checked against the pricing page's own FAQ and calculator
   - the typed client → HTTP → handlers path, with both error shapes and idempotency
   - stream paging and abort
+- **Network** (Vitest): lost requests, lost replies after the work is done, timeouts, offline. A retry never repeats the work.
 - **End-to-end** (Playwright, production build, real Service Worker):
   - create, exec, sleep and auto-wake, persistence, streaming
   - wake timing, ⌘K, reload, destroy, failure injection
+  - offline banner and last-known statuses, slow-network pending states, stop watching, the failed-machine banner
+  - the Service Worker killed mid-session
   - reduced motion, and no horizontal scroll on phones
 - **Accessibility:** axe audits of every page.
 - **Performance:** Lighthouse CI budgets. Accessibility, CLS and SEO fail the build; performance, LCP and TBT warn.
@@ -82,8 +87,9 @@ Add `?seed=42` to the URL for a clean, reproducible simulator.
 - **Why the simulator runs in a Service Worker:** a server-side simulator would flake on serverless hosting, where instances don't share memory. In the browser, each visitor gets an isolated fleet and the demo can't go down.
 - **Why every simulator response is stamped:** browsers stop idle Service Workers, and MSW's worker forgets its tabs when that happens. That broke the live site before any test caught it. The client now spots a response that skipped the simulator, reconnects and retries. `e2e/resilience.spec.ts` kills the worker mid-session to prove it.
 - **Why the empty state is server-rendered:** the largest paint shouldn't wait for the simulator. A pre-paint script tells CSS whether this visitor has a saved fleet, so first visits paint the real empty state instantly. Measured console LCP went from 4.7s to 1.7s.
-- **Springs vs. tweens:** anything that represents *state* uses a spring, because phase updates arrive faster than a tween can finish. The 2.5s reference bar is a linear tween because it represents *time*.
+- **Never show a status that might be false:** a stopped stream isn't a cancelled command; after a lost reply the app says it's checking, not that nothing changed.
+- **Springs vs. tweens:** anything that represents *state* uses a spring, because phase updates arrive faster than a tween can finish. The 2.5s reference bar is a linear tween because it represents *time*. Page-wide slide transitions were removed because they slowed every navigation without explaining anything.
 
 ---
 
-Built by Hafsa Usmani. Feedback welcome.
+Built by Hafsa Usmani. Who did what, including tools and AI assistance, is on the [case study page](https://dedalus-demo-delta.vercel.app/about#ownership).

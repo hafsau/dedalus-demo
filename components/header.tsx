@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PaletteButton } from "./palette-button";
+import { SimControls } from "./sim-controls";
 
 function Mark() {
   // A reticle with a single live point: the machine.
@@ -21,26 +22,7 @@ export function Header() {
           <span className="hidden text-sm text-dim sm:inline">for Dedalus Machines</span>
         </Link>
 
-        <button
-          type="button"
-          popoverTarget="sim-explainer"
-          className="ml-1 border border-accent/40 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.18em] text-accent uppercase hover:bg-accent/10"
-        >
-          Simulated
-        </button>
-        <div
-          id="sim-explainer"
-          popover="auto"
-          className="m-0 mt-2 max-w-sm border border-line-strong bg-raised p-4 text-sm leading-relaxed text-muted [inset:auto] [position-area:bottom_span-right] [position-try-fallbacks:flip-block]"
-        >
-          <p className="text-fg">Everything here runs against a simulated control plane.</p>
-          <p className="mt-2">
-            It implements the public DCS OpenAPI spec over real HTTP, inside a Service Worker in your browser. Wake
-            latency is sampled around Dedalus&apos; published &lt;50ms figure. Nothing here is a measurement of their
-            infrastructure.
-          </p>
-          <p className="mt-2 text-dim">Unofficial concept. Not affiliated with Dedalus Labs.</p>
-        </div>
+        <SimControls />
 
         <nav className="ml-auto flex items-center gap-1 text-sm">
           <Link href="/" className="px-2 py-1 text-muted hover:text-fg">

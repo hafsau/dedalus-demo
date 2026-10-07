@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ExecutionStatus } from "@/lib/api/types";
-import { dcs, ApiError } from "@/lib/client/api";
+import { ApiError, dcs, describeError } from "@/lib/client/api";
 import { availability, hostname } from "@/lib/client/rules";
 import { streamExecution } from "@/lib/client/stream";
 import type { MachineState } from "@/lib/client/fleet-store";
@@ -14,11 +14,13 @@ interface Entry {
   command: string;
   cwd: string;
   chunks: Array<{ stream: "stdout" | "stderr" | "meta"; text: string }>;
-  status: ExecutionStatus | "sending" | "local";
+  status: ExecutionStatus | "sending" | "local" | "detached";
   exit?: number;
   startedAt: number;
   durationMs?: number;
   woke?: boolean;
+  executionId?: string;
+  checking?: boolean;
 }
 
 const HOME = "/root";
@@ -138,7 +140,12 @@ export function Terminal({ machine }: { machine: MachineState }) {
           command: ["/bin/bash", "-lc", script],
           ...(cwd !== HOME ? { cwd } : {}),
         });
-        update(entry.id, (e) => ({ ...e, status: exec.status, woke: exec.status === "wake_in_progress" }));
+        update(entry.id, (e) => ({
+          ...e,
+          executionId: exec.execution_id,
+          status: exec.status,
+          woke: exec.status === "wake_in_progress",
+        }));
         store.kick();
 
         let stdout = "";
@@ -165,13 +172,24 @@ export function Terminal({ machine }: { machine: MachineState }) {
           if (next?.startsWith("/")) setCwd(next);
         }
       } catch (err) {
-        const text =
-          controller.signal.aborted ? "^C\n" : err instanceof ApiError ? `${err.code}: ${err.message}\n` : "request failed\n";
-        update(entry.id, (e) => ({
-          ...e,
-          status: controller.signal.aborted ? "cancelled" : "failed",
-          chunks: [...e.chunks, { stream: "meta", text }],
-        }));
+        if (controller.signal.aborted) {
+          // Stopping the stream doesn't stop the command. The API has no
+          // documented cancel for executions, so say exactly what happened.
+          update(entry.id, (e) => ({
+            ...e,
+            status: "detached",
+            durationMs: performance.now() - e.startedAt,
+            chunks: [...e.chunks, { stream: "meta", text: "^C\n" }],
+          }));
+        } else {
+          const text = err instanceof ApiError ? `${err.code}: ${err.message}\n` : `${describeError(err, "run this command")}\n`;
+          update(entry.id, (e) => ({
+            ...e,
+            status: "failed",
+            durationMs: performance.now() - e.startedAt,
+            chunks: [...e.chunks, { stream: "meta", text }],
+          }));
+        }
       } finally {
         abortRef.current = null;
         setBusy(false);
@@ -181,6 +199,39 @@ export function Terminal({ machine }: { machine: MachineState }) {
     },
     [cwd, id, store],
   );
+
+  /** After "stopped watching": ask the control plane what actually happened. */
+  async function checkStatus(entry: Entry) {
+    if (!entry.executionId) return;
+    update(entry.id, (e) => ({ ...e, checking: true }));
+    try {
+      const client = dcs();
+      const exec = await client.getExecution(id, entry.executionId);
+      const finished = ["succeeded", "failed", "cancelled", "expired"].includes(exec.status);
+      if (finished) {
+        const out = await client.getOutput(id, entry.executionId);
+        update(entry.id, (e) => ({
+          ...e,
+          checking: false,
+          status: exec.status,
+          exit: exec.exit_code,
+          chunks: [
+            ...(out.stdout ? [{ stream: "stdout" as const, text: out.stdout }] : []),
+            ...(out.stderr ? [{ stream: "stderr" as const, text: out.stderr }] : []),
+            { stream: "meta" as const, text: "(full output, fetched after it finished)\n" },
+          ],
+        }));
+      } else {
+        update(entry.id, (e) => ({
+          ...e,
+          checking: false,
+          chunks: [...e.chunks, { stream: "meta", text: `still ${exec.status.replaceAll("_", " ")} on the machine\n` }],
+        }));
+      }
+    } catch (err) {
+      update(entry.id, (e) => ({ ...e, checking: false, chunks: [...e.chunks, { stream: "meta", text: `${describeError(err, "check status")}\n` }] }));
+    }
+  }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -273,7 +324,19 @@ export function Terminal({ machine }: { machine: MachineState }) {
             )}
             {e.status !== "local" && (
               <div className="text-[11px] text-dim">
-                {e.durationMs === undefined ? (
+                {e.status === "detached" ? (
+                  <span className="text-warn/90">
+                    stopped watching · the command may still be running on the machine ·{" "}
+                    <button
+                      type="button"
+                      onClick={() => void checkStatus(e)}
+                      disabled={e.checking}
+                      className="underline underline-offset-2 hover:text-fg disabled:opacity-50"
+                    >
+                      {e.checking ? "checking…" : "check status"}
+                    </button>
+                  </span>
+                ) : e.durationMs === undefined ? (
                   <span>
                     {e.status === "sending" ? "sending" : e.status.replaceAll("_", " ")}
                     <span className="caret">…</span>
@@ -305,12 +368,21 @@ export function Terminal({ machine }: { machine: MachineState }) {
           }}
           onKeyDown={onKeyDown}
           disabled={!can.allowed}
-          placeholder={can.allowed ? (busy ? "running… (Ctrl+C to stop)" : "type a command") : can.reason}
+          placeholder={can.allowed ? (busy ? "running… (Ctrl+C or Stop to stop watching)" : "type a command") : can.reason}
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
           className="min-w-0 flex-1 bg-transparent text-fg caret-accent outline-none placeholder:text-dim focus-visible:outline-none disabled:cursor-not-allowed"
         />
+        {busy && (
+          <button
+            type="button"
+            onClick={() => abortRef.current?.abort(new Error("stopped"))}
+            className="ml-2 shrink-0 border border-line-strong px-2 py-0.5 text-[11px] text-muted hover:border-warn hover:text-warn"
+          >
+            Stop
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1.5 border-t border-line px-4 py-3">

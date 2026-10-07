@@ -169,51 +169,15 @@ dialog.sheet::backdrop {
   backdrop-filter: blur(4px);
 }
 
-/* View transitions: shared machine identity morphs between fleet and detail. */
+/*
+ * View transitions: only the machine's name morphs between fleet and detail,
+ * so you keep your place. Page-wide slides were removed: they delayed every
+ * navigation by ~360ms without telling the user anything.
+ */
 ::view-transition-group(.morph) {
   animation-duration: 380ms;
   animation-timing-function: var(--ease-out);
 }
-/* Direction encodes hierarchy: deeper slides left, back slides right. */
-::view-transition-old(.nav-forward) {
-  --slide-offset: -40px;
-  animation:
-    var(--duration-exit) ease-in both vt-fade reverse,
-    360ms var(--ease-out) both vt-slide reverse;
-}
-::view-transition-new(.nav-forward) {
-  --slide-offset: 40px;
-  animation:
-    var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
-    360ms var(--ease-out) both vt-slide;
-}
-::view-transition-old(.nav-back) {
-  --slide-offset: 40px;
-  animation:
-    var(--duration-exit) ease-in both vt-fade reverse,
-    360ms var(--ease-out) both vt-slide reverse;
-}
-::view-transition-new(.nav-back) {
-  --slide-offset: -40px;
-  animation:
-    var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
-    360ms var(--ease-out) both vt-slide;
-}
-@keyframes vt-fade {
-  from {
-    opacity: 0;
-    filter: blur(2px);
-  }
-}
-@keyframes vt-slide {
-  from {
-    translate: var(--slide-offset);
-  }
-  to {
-    translate: 0;
-  }
-}
-
 @keyframes pulse-ring {
   0% {
     transform: scale(1);

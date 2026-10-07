@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { LIMITS } from "@/lib/sim/engine";
+import { ConnectionBanner } from "./connection-banner";
 import { MachineCard } from "./machine-card";
 import { requestCreate } from "./new-machine-dialog";
 import { useFleet } from "./providers";
@@ -40,11 +41,9 @@ export function FleetView() {
         )}
       </div>
 
-      {fleet.error && (
-        <p role="alert" className="mt-6 border border-danger/40 px-4 py-3 font-mono text-xs text-danger">
-          Control plane unreachable: {fleet.error}. Retrying.
-        </p>
-      )}
+      <div className="mt-6 empty:hidden">
+        <ConnectionBanner />
+      </div>
 
       {/* Slots keep stable positions so the empty state is the *same* DOM node
           before and after boot: no remount, no second LCP paint. Before boot,

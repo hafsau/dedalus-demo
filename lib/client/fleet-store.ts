@@ -4,7 +4,7 @@
 
 import { TRANSITIONAL_PHASES, type LifecycleStatus, type MachineListItem, type Phase } from "../api/types";
 import { accrue, emptyLedger, type Ledger } from "../cost";
-import { ApiError, type DcsClient } from "./api";
+import { describeError, type DcsClient } from "./api";
 import { hostname } from "./rules";
 
 export interface WakeSample {
@@ -35,7 +35,10 @@ export interface FleetSnapshot {
   loaded: boolean;
   machines: Record<string, MachineState>;
   order: string[];
+  /** Set while the control plane can't be reached; statuses are then "last known". */
   error?: string;
+  /** When the fleet was last confirmed by the control plane (ms epoch). */
+  lastOkAt?: number;
   toast?: { id: number; tone: "error" | "info"; message: string };
 }
 
@@ -92,6 +95,7 @@ export class FleetStore {
   }
 
   private busy(): boolean {
+    if (this.snap.error) return false; // back off to the slow cadence while unreachable
     return Object.values(this.snap.machines).some(
       (m) => TRANSITIONAL_PHASES.has(m.item.phase) || m.pending || m.waking,
     );
@@ -102,9 +106,9 @@ export class FleetStore {
     try {
       const items = await this.client.listMachines();
       this.ingest(items);
-      if (this.snap.error) this.set({ error: undefined });
     } catch (e) {
-      this.set({ error: e instanceof Error ? e.message : "Couldn't reach the control plane", loaded: true });
+      // Keep the last known fleet on screen, but say plainly that it may be out of date.
+      this.set({ error: describeError(e), loaded: true });
     }
     if (!this.running) return;
     if (this.timer) clearTimeout(this.timer);
@@ -137,7 +141,7 @@ export class FleetStore {
       machines[item.machine_id] = m;
     }
     if (!this.snap.loaded) performance.mark("workshop:fleet-loaded");
-    this.set({ loaded: true, machines, order: items.map((i) => i.machine_id) });
+    this.set({ loaded: true, machines, order: items.map((i) => i.machine_id), error: undefined, lastOkAt: now });
     for (const id of toFetchStatus) void this.refreshStatus(id);
   }
 
@@ -176,8 +180,9 @@ export class FleetStore {
       await call();
     } catch (e) {
       this.patch(id, (m) => ({ ...m, pending: undefined, waking: undefined }));
-      this.toast(e instanceof ApiError ? `${e.code}: ${e.message}` : `Couldn't ${action}`);
+      this.toast(describeError(e, action));
     }
+    // Always re-read the real state: after a lost reply, the action may or may not have happened.
     this.kick();
   }
 
@@ -211,7 +216,8 @@ export class FleetStore {
       this.kick();
       return m.machine_id;
     } catch (e) {
-      this.toast(e instanceof ApiError ? `${e.code}: ${e.message}` : "Couldn't create machine");
+      this.toast(describeError(e, "create the machine"));
+      this.kick();
       return null;
     }
   }

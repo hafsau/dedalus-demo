@@ -3,9 +3,10 @@
 // same paths, same JSON shapes, both of the spec's error formats, and
 // Idempotency-Key semantics on every mutation.
 
-import { http, HttpResponse, type HttpResponseResolver } from "msw";
+import { delay, http, HttpResponse, type HttpResponseResolver } from "msw";
 import type { CreateExecutionRequest, CreateMachineRequest, UpdateMachineRequest } from "../api/types";
 import { SimError, type SimEngine } from "./engine";
+import type { NetworkConditions } from "./network";
 import { SIM_HEADER } from "./protocol";
 
 export const SIM_BASE = "/dcs";
@@ -53,7 +54,10 @@ async function readJson<T>(request: Request): Promise<T | SimError> {
  * handlers serve the browser worker (`/dcs`) and Node tests
  * (`http://localhost/dcs`).
  */
-export function createHandlers(getEngine: () => SimEngine, opts: { base?: string; onChange?: () => void } = {}) {
+export function createHandlers(
+  getEngine: () => SimEngine,
+  opts: { base?: string; onChange?: () => void; network?: () => NetworkConditions } = {},
+) {
   const base = opts.base ?? SIM_BASE;
   const v1 = `${base}/v1`;
   const idempotency = new Map<string, Recorded>();
@@ -63,7 +67,14 @@ export function createHandlers(getEngine: () => SimEngine, opts: { base?: string
   const route =
     (fn: Fn, status = 200): HttpResponseResolver<Params> =>
     async (info) => {
+      const net = opts.network?.();
+      const wait = net?.delayMs() ?? 0;
+      if (wait > 0) await delay(wait);
+      const fault = net?.fault(info.request.method) ?? "none";
+      if (fault === "drop-request") return HttpResponse.error();
       const res = await respond(fn, status, info);
+      // The work above happened; only the reply is lost.
+      if (fault === "drop-response") return HttpResponse.error();
       res.headers.set(SIM_HEADER, "1");
       return res;
     };

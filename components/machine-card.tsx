@@ -7,7 +7,7 @@ import type { MachineState } from "@/lib/client/fleet-store";
 import { availability, hostname } from "@/lib/client/rules";
 import { formatSeconds } from "@/lib/sim/duration";
 import { PhaseBadge } from "./phase-badge";
-import { useFleetStore } from "./providers";
+import { useFleet, useFleetStore } from "./providers";
 
 export function sizeLabel(m: { vcpu: number; memory_mib: number; storage_gib: number }) {
   return `${m.vcpu} vCPU · ${m.memory_mib / 1024} GiB · ${m.storage_gib} GiB disk`;
@@ -15,6 +15,7 @@ export function sizeLabel(m: { vcpu: number; memory_mib: number; storage_gib: nu
 
 export function MachineCard({ machine }: { machine: MachineState }) {
   const store = useFleetStore();
+  const stale = !!useFleet().error;
   const { item, pending } = machine;
   const id = item.machine_id;
   const wake = availability("wake", item.phase, item.desired_state);
@@ -34,7 +35,6 @@ export function MachineCard({ machine }: { machine: MachineState }) {
               <Link
                 href={`/machines/${id}`}
                 className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
-                transitionTypes={["nav-forward"]}
               >
                 {hostname(id)}
               </Link>
@@ -42,7 +42,7 @@ export function MachineCard({ machine }: { machine: MachineState }) {
           </ViewTransition>
           <p className="mt-1 text-xs text-dim">{sizeLabel(item)}</p>
         </div>
-        <PhaseBadge phase={item.phase} />
+        <PhaseBadge phase={item.phase} stale={stale} />
       </div>
 
       <dl className="grid grid-cols-2 gap-3 font-mono text-xs">
