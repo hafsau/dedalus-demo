@@ -46,6 +46,7 @@ next-env.d.ts
 /blob-report
 /.lighthouseci
 
-# local tooling
-/.claude
+# local tooling (shared project settings are committed; personal ones aren't)
+/.claude/*
+!/.claude/settings.json
 /lighthouse-reports
