@@ -14,7 +14,8 @@ async function createMachine(page: Page) {
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Create machine" }).click();
   await expect(page).toHaveURL(/\/machines\/[0-9a-f-]{36}/);
-  await expect(page.getByText("running", { exact: true }).first()).toBeVisible();
+  // Not getByText("running"): the ring always shows "running" as a label.
+  await expect(page.getByRole("img", { name: /Lifecycle: running/ })).toBeVisible();
 }
 
 const header = (page: Page) => page.locator("main").getByRole("button", { name: /^(Wake|Sleep|Reboot|Destroy|Confirm destroy)/ });
@@ -123,4 +124,22 @@ test("an injected boot failure shows the error state", async ({ page }) => {
   await action(page, "Wake").click();
   await expect(page.getByText(/simulated failure/)).toBeVisible();
   await expect(action(page, "Wake")).toHaveAccessibleName(/can't be woken/);
+});
+
+test("a machine created right before a reload isn't lost", async ({ page }) => {
+  // Regression: saves were debounced by 250ms, so a reload inside that window
+  // dropped the machine. Create and reload in the same tick to hit it every time.
+  await page.goto("/?seed=8");
+  await expect(page.getByText("No machines yet")).toBeVisible();
+  await expect(page.getByText(/Fleet · 0\/5 machines/)).toBeVisible(); // simulator is up
+  const id = await page.evaluate(async () => {
+    const res = await fetch("/dcs/v1/machines", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const { machine_id } = await res.json();
+    // A real reload is the point of this test, not a client-side navigation.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    location.href = "/"; // no ?seed: the next page restores from storage
+    return machine_id as string;
+  });
+  await page.waitForURL((url) => url.pathname === "/" && !url.search);
+  await expect(page.getByRole("link", { name: `dm-${id.slice(0, 8)}` })).toBeVisible();
 });

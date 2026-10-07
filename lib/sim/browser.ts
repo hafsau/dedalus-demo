@@ -3,13 +3,20 @@
 import { setupWorker } from "msw/browser";
 import { createHandlers } from "./handlers";
 import { currentConditions } from "./network";
-import { getEngine, persist } from "./store";
+import { flush, getEngine, persist } from "./store";
 
 let starting: Promise<unknown> | null = null;
 let reactivating: Promise<void> | null = null;
 
 /** Starts the in-browser control plane. Idempotent. */
 export function startSimulator(): Promise<unknown> {
+  if (!starting) {
+    // Don't lose the last few changes to the save debounce on reload or close.
+    addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flush();
+    });
+  }
   starting ??= setupWorker(...createHandlers(getEngine, { onChange: persist, network: currentConditions })).start({
     quiet: true,
     onUnhandledFrame: "bypass",

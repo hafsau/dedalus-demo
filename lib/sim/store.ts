@@ -39,17 +39,32 @@ export function getEngine(): SimEngine {
   return engine;
 }
 
+function write(): void {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(getEngine().snapshot()));
+  } catch {
+    // Storage full or blocked: the sim keeps running in memory.
+  }
+}
+
 /** Debounced so a burst of polling requests costs one write. */
 export function persist(): void {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    try {
-      localStorage.setItem(KEY, JSON.stringify(getEngine().snapshot()));
-    } catch {
-      // Storage full or blocked: the sim keeps running in memory.
-    }
+    write();
   }, 250);
+}
+
+/**
+ * Write now, skipping the debounce. Called when the page is hidden or
+ * closed: without it, reloading within 250ms of creating a machine lost it.
+ */
+export function flush(): void {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  write();
 }
 
 export function resetSimulator(): void {
